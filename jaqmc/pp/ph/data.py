@@ -6,6 +6,8 @@
 
 import numpy as np
 import pathlib
+import re
+import xml.etree.ElementTree as ET
 
 # value: spin
 PH_TM_ELEMENTS = {'Cr': 6,
@@ -23,28 +25,45 @@ TM_ELEMENTS_INFO = {'Cr': (14.0, False),
                     'Ni': (18.0, True),
                     'Cu': (19.0, True),
                     'Zn': (20.0, False)}
-
 # value: spin
 PH_MG_ELEMENTS = {'S': 2}
 # value: (charge, use_hf)
 MG_ELEMENTS_INFO = {'S': (6.0, False)}
 
 PH_ELEMENTS = {**PH_TM_ELEMENTS, **PH_MG_ELEMENTS}
+HPH_ELEMENTS = {'Sc'}
 
 def PH_config(get_config,
               get_ecp_cfg_ref_from_cfg=lambda x: x.ecp,
               get_pyscf_mol_from_cfg=lambda x: x.system.pyscf_mol):
     def wrapper(*args):
+        """
+        Wrap a user config and automatically initialize PH/HPH information.
+
+        The user config is expected to declare only which atoms should use
+        pure PH (`ph_elements`) and/or hybrid PH (`hph_elements`).
+        The wrapper then generates `ph_info` and `hph_info` automatically
+        from the PySCF molecule.
+        """
         cfg = get_config(*args)
         pyscf_mol = get_pyscf_mol_from_cfg(cfg)
         ecp_cfg_ref = get_ecp_cfg_ref_from_cfg(cfg)
-        ecp_cfg_ref.ph_info = gen_ph_info(pyscf_mol._atom,
-                                          ph_elements=ecp_cfg_ref.ph_elements)
+
+        if getattr(ecp_cfg_ref, 'ph_info', None) is None:
+            ecp_cfg_ref.ph_info = gen_ph_info(
+                pyscf_mol._atom,
+                ph_elements=getattr(ecp_cfg_ref, 'ph_elements', None),
+            )
+
+        if getattr(ecp_cfg_ref, 'hph_info', None) is None:
+            ecp_cfg_ref.hph_info = gen_hph_info(
+                pyscf_mol._atom,
+                hph_elements=getattr(ecp_cfg_ref, 'hph_elements', None),
+            )
         return cfg
     return wrapper
 
 def parse_TM_xml(xml_file):
-    import xml.etree.ElementTree as ET
     tree = ET.parse(xml_file)
     root = tree.getroot()
 
@@ -86,8 +105,73 @@ def gen_ph_data_MG(element):
     # loc_data + charge = r * \tilde{v}_loc
     return loc_data + charge, l2_data
 
+def parse_compact_data(text):
+    """
+    Extract floating-point numbers from compact numeric text.
+    """
+    tokens = re.findall(r"[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?", text)
+    return np.array([float(t) for t in tokens])
+
+def extract_L2_data(xml_file):
+    """
+    Extract the L2 radial function data from a pseudopotential XML file.
+    """
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    tag = root.find(".//L2//radfunc//data")
+
+    if tag is None:
+        raise ValueError("L2/radfunc/data was not found in the XML file")
+
+    text = tag.text
+    tokens = re.findall(r"[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?", text)
+
+    if len(tokens) == 0:
+        raise ValueError(
+            "No L2 data values were found (regex extraction returned zero tokens)"
+        )
+
+    return np.array([float(t) for t in tokens])
+
+def extract_semilocal_data(xml_file, l_target="d"):
+    """
+    Extract semilocal radial potential data for a specified angular momentum
+    channel from a pseudopotential XML file.
+    """
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    vps_list = root.findall(".//semilocal//vps")
+
+    for vps in vps_list:
+        if vps.get("l") == l_target:
+            data_tag = vps.find(".//radfunc//data")
+
+            if data_tag is None:
+                raise RuntimeError(
+                    f"No radial function data found for vps(l={l_target})."
+                )
+
+            text = data_tag.text
+            return parse_compact_data(text)
+
+    raise RuntimeError(
+        f"No semilocal vps entry found for angular momentum l={l_target}."
+    )
+
+def load_sc_ph_data():
+    xml_file = pathlib.Path(__file__).parent.resolve() / "raw_data" / "TM" / "Sc.0.21_187.xml"
+
+    loc_data = extract_semilocal_data(xml_file=str(xml_file), l_target="d")
+    l2_data = extract_L2_data(xml_file=str(xml_file))
+
+    return dict(Sc=(loc_data + 11.0, l2_data))
+
 def gen_ph_data(element):
-    if element in PH_TM_ELEMENTS:
+    if element == 'Sc':
+        return load_sc_ph_data()['Sc']
+    elif element in PH_TM_ELEMENTS:
         return gen_ph_data_TM(element)
     elif element in PH_MG_ELEMENTS:
         return gen_ph_data_MG(element)
@@ -99,7 +183,6 @@ def gen_ph_info(atoms, ph_elements=None):
         # Try all available PH elements
         if ph_elements is None:
             return element in PH_ELEMENTS
-
         return element in ph_elements
 
     ph_atom_pos = []
@@ -110,6 +193,27 @@ def gen_ph_info(atoms, ph_elements=None):
             if symbol not in ph_data:
                 ph_data[symbol] = gen_ph_data(symbol)
     return (ph_atom_pos, ph_data)
+
+def gen_hph_data(element):
+    if element == 'Sc':
+        return load_sc_ph_data()['Sc']
+    else:
+        raise NotImplementedError(f'The HPH for {element} is not supported yet')
+
+def gen_hph_info(atoms, hph_elements=None):
+    def should_consider_hph(element):
+        if hph_elements is None:
+            return False
+        return element in hph_elements
+
+    hph_atom_pos = []
+    hph_data = dict()
+    for symbol, pos in atoms:
+        if should_consider_hph(symbol):
+            hph_atom_pos.append((symbol, pos))
+            if symbol not in hph_data:
+                hph_data[symbol] = gen_hph_data(symbol)
+    return (hph_atom_pos, hph_data)
 
 def gen_ph_data_Co():
     '''
@@ -122,11 +226,20 @@ def gen_ph_data_Co():
     , which support all the first row transition metals, including Co.
     '''
     def parse_xml(xml_file):
-        import xml.etree.ElementTree as ET
         tree = ET.parse(xml_file)
         root = tree.getroot()
-        loc_data = [float(y) for x in root[3][0][0][1].text.split('\n') for y in x.strip().split(' ') if y != '']
-        L2_data = [float(y) for x in root[2][0][1].text.split('\n') for y in x.strip().split(' ') if y != '']
+        loc_data = [
+            float(y)
+            for x in root[3][0][0][1].text.split('\n')
+            for y in x.strip().split(' ')
+            if y != ''
+        ]
+        L2_data = [
+            float(y)
+            for x in root[2][0][1].text.split('\n')
+            for y in x.strip().split(' ')
+            if y != ''
+        ]
         return np.array(loc_data), np.array(L2_data)
 
     xml_file = pathlib.Path(__file__).parent.resolve() / 'raw_data' / 'TM' / 'Co.pure.xml'
