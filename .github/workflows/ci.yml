@@ -62,4 +62,22 @@ jobs:
           enable-cache: true
 
       - name: Run tests
+        if: matrix.tox-env != 'py312-jax0.9.1'
         run: uvx --with tox-uv tox -e ${{ matrix.tox-env }} -- -n 3
+
+      - name: Run tests with coverage
+        if: matrix.tox-env == 'py312-jax0.9.1'
+        run: uvx --with tox-uv tox -e py312-jax0.9.1 -- -n 3 --cov --cov-branch --cov-report=xml --junitxml=junit.xml -o junit_family=legacy
+
+      - name: Upload coverage to Codecov
+        if: matrix.tox-env == 'py312-jax0.9.1'
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: bytedance/jaqmc
+
+      - name: Upload test results to Codecov
+        if: ${{ matrix.tox-env == 'py312-jax0.9.1' && !cancelled() }}
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
