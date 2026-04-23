@@ -11,7 +11,7 @@ from jaqmc.utils.wiring import runtime_dep
 from jaqmc.wavefunction.base import ComplexWFOutput, Wavefunction
 
 
-class Laughlin(Wavefunction[HallData, ComplexWFOutput]):
+class SphericalLaughlin(Wavefunction[HallData, ComplexWFOutput]):
     """Laughlin wavefunction for ground states on the Haldane sphere.
 
     Constructs the Laughlin state as a Slater determinant of composite

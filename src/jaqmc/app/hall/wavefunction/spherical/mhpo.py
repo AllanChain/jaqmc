@@ -23,7 +23,7 @@ from jaqmc.wavefunction.output.orbital import SplitChannelDense
 
 from .jastrow import SphericalJastrow
 
-__all__ = ["MHPO"]
+__all__ = ["SphericalMHPO"]
 
 
 class MonopoleOrbitals(nn.Module):
@@ -64,7 +64,7 @@ class MonopoleOrbitals(nn.Module):
         return jnp.moveaxis(orbitals, -1, 0)  # (ndets, nelec, nelec)
 
 
-class MHPO(Wavefunction[HallData, ComplexWFOutput]):
+class SphericalMHPO(Wavefunction[HallData, ComplexWFOutput]):
     r"""Monopole harmonics product orbital ansatz on the Haldane sphere.
 
     Architecture:

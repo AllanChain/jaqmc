@@ -3,23 +3,15 @@
 
 """Configuration for the quantum Hall effect on a Haldane sphere."""
 
-from enum import StrEnum
+from typing import Literal
 
 from jaqmc.utils.config import configurable_dataclass
 
-
-class InteractionType(StrEnum):
-    r"""Electron-electron interaction type on the Haldane sphere.
-
-    Attributes:
-        coulomb: Coulomb repulsion :math:`1/r_{ij}`.
-    """
-
-    coulomb = "coulomb"
+__all__ = ["HallSphericalConfig"]
 
 
 @configurable_dataclass
-class HallConfig:
+class HallSphericalConfig:
     r"""Configuration for a quantum Hall system on the Haldane sphere.
 
     Args:
@@ -37,7 +29,7 @@ class HallConfig:
     flux: int = 2
     nspins: tuple[int, int] = (3, 0)
     radius: float | None = None
-    interaction_type: InteractionType = InteractionType.coulomb
+    interaction_type: Literal["coulomb"] = "coulomb"
     interaction_strength: float = 1.0
     lz_center: float = 0.0
     lz_penalty: float = 0.0

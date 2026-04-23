@@ -92,7 +92,7 @@ def _uniform_sample_sphere(key: PRNGKey) -> jnp.ndarray:
 
 
 @configurable_dataclass
-class OneRDM(Estimator):
+class SphericalOneRDM(Estimator):
     r"""One-body reduced density matrix on the Haldane sphere.
 
     Computes the 1-RDM in the monopole harmonic basis

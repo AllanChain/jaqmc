@@ -48,7 +48,7 @@ def make_monopole_harm(q: float, ell: float, m: float):
     return Y_qlm
 
 
-class Free(Wavefunction[HallData, ComplexWFOutput]):
+class SphericalFree(Wavefunction[HallData, ComplexWFOutput]):
     """Free-electron wavefunction using monopole harmonics.
 
     Fills the lowest Landau level with monopole harmonics. Useful as a

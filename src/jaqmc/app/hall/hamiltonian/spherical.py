@@ -4,12 +4,11 @@
 """Potential energy estimator for the Haldane sphere."""
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
 from jax import numpy as jnp
 from jax.numpy import cos, sin
 
-from jaqmc.app.hall.config import InteractionType
 from jaqmc.array_types import Params, PRNGKey
 from jaqmc.data import Data
 from jaqmc.estimator.base import Estimator
@@ -30,7 +29,7 @@ class SpherePotential(Estimator):
         interaction_strength: Overall scaling factor.
     """
 
-    interaction_type: InteractionType = InteractionType.coulomb
+    interaction_type: Literal["coulomb"] = "coulomb"
     monopole_strength: float = 1.0
     radius: float = 1.0
     interaction_strength: float = 1.0
@@ -53,7 +52,7 @@ class SpherePotential(Estimator):
         )
         cos12 = jnp.einsum("ia,ja->ij", xyz, xyz)
 
-        if self.interaction_type == InteractionType.coulomb:
+        if self.interaction_type == "coulomb":
             r_ee = jnp.sqrt(2 - 2 * cos12)
             potential = jnp.sum(jnp.triu(1 / r_ee, k=1)) / self.radius
         else:

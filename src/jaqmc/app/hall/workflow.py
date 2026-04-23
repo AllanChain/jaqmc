@@ -23,10 +23,14 @@ from jaqmc.workflow.stage.evaluation import EvaluationWorkStage
 from jaqmc.workflow.stage.vmc import VMCWorkStage
 from jaqmc.workflow.vmc import VMCWorkflow
 
-from .config import HallConfig
+from .config import HallSphericalConfig, HallSystemConfig
 from .data import data_init
-from .estimator import OneRDM, PairCorrelation, PenalizedLoss
-from .hamiltonian import SpherePotential
+from .estimator.spherical import (
+    SphericalOneRDM,
+    SphericalPairCorrelation,
+    SphericalPenalizedLoss,
+)
+from .hamiltonian.spherical import SpherePotential
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +60,11 @@ class HallTrainWorkflow(VMCWorkflow):
 
         self.data_init = partial(data_init, system_config)
 
-        has_penalties = system_config.lz_penalty or system_config.l2_penalty
-        loss_key = "penalized_loss" if has_penalties else "total_energy"
+        loss_key = "total_energy"
+        if isinstance(system_config, HallSphericalConfig) and (
+            system_config.lz_penalty or system_config.l2_penalty
+        ):
+            loss_key = "penalized_loss"
 
         estimators = make_estimators(cfg, wf, system_config, always_enable_energy=True)
 
@@ -93,20 +100,23 @@ class HallEvalWorkflow(EvaluationWorkflow):
 
 def configure_system(
     cfg: ConfigManagerLike,
-) -> tuple[HallConfig, Any]:
+) -> tuple[HallSystemConfig, Any]:
     """Build the shared system objects for quantum Hall workflows.
 
     Returns:
         Tuple of (system_config, wavefunction).
     """
-    system_config: HallConfig = cfg.get_module(
-        "system", "jaqmc.app.hall.config:HallConfig"
+    system_config: HallSystemConfig = cfg.get_module(
+        "system", "jaqmc.app.hall.config.spherical"
     )
 
-    wf = cfg.get_module("wf", "jaqmc.app.hall.wavefunction.mhpo")
-    wf.nspins = system_config.nspins
-    wf.monopole_strength = system_config.flux / 2
-    wf.flux = system_config.flux
+    if isinstance(system_config, HallSphericalConfig):
+        wf = cfg.get_module("wf", "jaqmc.app.hall.wavefunction.spherical.mhpo")
+        wf.nspins = system_config.nspins
+        wf.monopole_strength = system_config.flux / 2
+        wf.flux = system_config.flux
+    else:
+        raise NotImplementedError("Geometries other than spherical is not implemented.")
 
     return system_config, wf
 
@@ -114,7 +124,18 @@ def configure_system(
 def make_estimators(
     cfg: ConfigManagerLike,
     wf: Any,
-    system_config: HallConfig,
+    system_config: HallSystemConfig,
+    always_enable_energy: bool = False,
+):
+    if isinstance(system_config, HallSphericalConfig):
+        return make_spherical_estimators(cfg, wf, system_config, always_enable_energy)
+    raise NotImplementedError("Geometries other than spherical is not implemented.")
+
+
+def make_spherical_estimators(
+    cfg: ConfigManagerLike,
+    wf: Any,
+    system_config: HallSphericalConfig,
     always_enable_energy: bool = False,
 ) -> dict[str, EstimatorLike]:
     estimators: dict[str, EstimatorLike] = {}
@@ -146,7 +167,7 @@ def make_estimators(
         estimators["total"] = TotalEnergy()
 
         if system_config.lz_penalty or system_config.l2_penalty:
-            estimators["penalty"] = PenalizedLoss(
+            estimators["penalty"] = SphericalPenalizedLoss(
                 lz_center=system_config.lz_center,
                 lz_penalty=system_config.lz_penalty,
                 l2_penalty=system_config.l2_penalty,
@@ -161,13 +182,13 @@ def make_estimators(
     if cfg.get("estimators.enabled.pair_correlation", False):
         estimators["pair_correlation"] = cfg.get(
             "estimators.pair_correlation",
-            PairCorrelation(),
+            SphericalPairCorrelation(),
         )
 
     if cfg.get("estimators.enabled.one_rdm", False):
         estimators["one_rdm"] = cfg.get(
             "estimators.one_rdm",
-            OneRDM(flux=system_config.flux, f_log_psi=wf.logpsi),
+            SphericalOneRDM(flux=system_config.flux, f_log_psi=wf.logpsi),
         )
 
     return estimators

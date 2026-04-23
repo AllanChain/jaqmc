@@ -10,13 +10,13 @@ import numpy as np
 import pytest
 from jax import numpy as jnp
 
-from jaqmc.app.hall.config import HallConfig, InteractionType
+from jaqmc.app.hall.config import HallSphericalConfig
 from jaqmc.app.hall.data import HallData, data_init
-from jaqmc.app.hall.estimator.penalized_loss import PenalizedLoss
-from jaqmc.app.hall.hamiltonian import SpherePotential
-from jaqmc.app.hall.wavefunction.free import Free
-from jaqmc.app.hall.wavefunction.jastrow import SphericalJastrow
-from jaqmc.app.hall.wavefunction.mhpo import MHPO
+from jaqmc.app.hall.estimator.spherical.penalized_loss import SphericalPenalizedLoss
+from jaqmc.app.hall.hamiltonian.spherical import SpherePotential
+from jaqmc.app.hall.wavefunction.spherical.free import SphericalFree
+from jaqmc.app.hall.wavefunction.spherical.jastrow import SphericalJastrow
+from jaqmc.app.hall.wavefunction.spherical.mhpo import SphericalMHPO
 from jaqmc.estimator.kinetic import LaplacianMode, SphericalKinetic
 from jaqmc.geometry.sphere import sphere_proposal
 from jaqmc.utils.wiring import wire
@@ -48,12 +48,12 @@ def _eval_single(estimator, data):
 
 class TestHallData:
     def test_data_init_shapes(self):
-        cfg = HallConfig(flux=2, nspins=(3, 0))
+        cfg = HallSphericalConfig(flux=2, nspins=(3, 0))
         batched = data_init(cfg, size=16, rngs=jax.random.PRNGKey(0))
         assert batched.data.electrons.shape == (16, 3, 2)
 
     def test_data_init_ranges(self):
-        cfg = HallConfig(flux=4, nspins=(2, 1))
+        cfg = HallSphericalConfig(flux=4, nspins=(2, 1))
         batched = data_init(cfg, size=32, rngs=jax.random.PRNGKey(1))
         theta = batched.data.electrons[..., 0]
         phi = batched.data.electrons[..., 1]
@@ -159,7 +159,6 @@ class TestSpherePotential:
     def test_coulomb_two_electrons(self):
         """Two electrons at opposite poles: distance=2, potential=1/(2R)."""
         estimator = SpherePotential(
-            interaction_type=InteractionType.coulomb,
             monopole_strength=1.0,
             radius=1.0,
             interaction_strength=1.0,
@@ -175,14 +174,14 @@ class TestPenalizedLoss:
 
     def test_no_penalty(self):
         """With zero penalties, loss == total_energy."""
-        est = PenalizedLoss(lz_penalty=0.0, l2_penalty=0.0)
+        est = SphericalPenalizedLoss(lz_penalty=0.0, l2_penalty=0.0)
         stats = {"total_energy": 5.0}
         out, _ = est.evaluate_local(None, None, stats, None, None)
         np.testing.assert_allclose(out["penalized_loss"], 5.0)
 
     def test_lz_penalty_only(self):
         """lz_penalty adds (Lz - center)^2 term."""
-        est = PenalizedLoss(lz_center=1.0, lz_penalty=2.0, l2_penalty=0.0)
+        est = SphericalPenalizedLoss(lz_center=1.0, lz_penalty=2.0, l2_penalty=0.0)
         stats = {
             "total_energy": 10.0,
             "angular_momentum_z": 3.0,
@@ -194,7 +193,7 @@ class TestPenalizedLoss:
 
     def test_both_penalties(self):
         """Both lz and l2 penalties contribute."""
-        est = PenalizedLoss(lz_center=0.0, lz_penalty=1.0, l2_penalty=0.5)
+        est = SphericalPenalizedLoss(lz_center=0.0, lz_penalty=1.0, l2_penalty=0.5)
         stats = {
             "total_energy": 1.0,
             "angular_momentum_z": 2.0,
@@ -248,7 +247,7 @@ class TestFreeWavefunction:
     """Free wavefunction: antisymmetry and exact kinetic energy."""
 
     def _make_free(self, nspins, flux):
-        wf = Free()
+        wf = SphericalFree()
         wire(wf, nspins=nspins, flux=flux)
         return wf
 
@@ -312,7 +311,7 @@ class TestMHPO:
     """MHPO wavefunction: antisymmetry and composite fermion branch."""
 
     def _make_mhpo(self, nspins=(2, 1), flux=4, flux_per_elec=0):
-        wf = MHPO(ndets=1, num_heads=2, heads_dim=8, num_layers=1)
+        wf = SphericalMHPO(ndets=1, num_heads=2, heads_dim=8, num_layers=1)
         wire(wf, nspins=nspins, monopole_strength=flux / 2, flux=flux)
         wf.flux_per_elec = flux_per_elec
         electrons = _sample(jax.random.PRNGKey(0), 1, sum(nspins))[0]

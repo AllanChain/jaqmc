@@ -6,7 +6,7 @@
 import jax
 from jax import numpy as jnp
 
-from jaqmc.app.hall.config import HallConfig
+from jaqmc.app.hall.config import HallSphericalConfig, HallSystemConfig
 from jaqmc.array_types import PRNGKey
 from jaqmc.data import BatchedData, Data
 
@@ -24,7 +24,15 @@ class HallData(Data):
     electrons: jnp.ndarray
 
 
-def data_init(config: HallConfig, size: int, rngs: PRNGKey) -> BatchedData[HallData]:
+def data_init(config: HallSystemConfig, size: int, rngs: PRNGKey):
+    if isinstance(config, HallSphericalConfig):
+        return spherical_data_init(config, size, rngs)
+    raise NotImplementedError("Geometries other than spherical is not implemented.")
+
+
+def spherical_data_init(
+    config: HallSphericalConfig, size: int, rngs: PRNGKey
+) -> BatchedData[HallData]:
     """Create uniform initial samples on the sphere.
 
     Args:
