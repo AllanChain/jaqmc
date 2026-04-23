@@ -67,6 +67,9 @@ html_theme = "sphinx_book_theme"
 html_static_path = ["_static"]
 html_favicon = "_static/jaqmc-light.svg"
 html_css_files = ["custom.css"]
+html_js_files = [
+    ("readthedocs.js", {"defer": "defer"}),
+]
 html_logo = "_static/jaqmc-light-large.svg"
 html_baseurl = "https://bytedance.github.io/jaqmc/"
 html_theme_options = {
